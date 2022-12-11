@@ -1,104 +1,110 @@
 import numpy as np
 import cv2
 
-# Identify pixels above the threshold
-# Threshold of RGB > 160 does a nice job of identifying ground pixels only
+#This function is used to detect and identify pixels that exceeds a given threshold.
 def color_thresh(img, rgb_thresh=(160, 160, 160)):
-    # Create an array of zeros same xy size as img, but single channel
+    #    1. An image and a desired threshold is given to the function.
+    #    2. Useing numpy to create a 0 initialized array where the detected element will be marked on
     color_select = np.zeros_like(img[:,:,0])
-    # Require that each pixel be above all three threshold values in RGB
-    # above_thresh will now contain a boolean array with "True"
-    # where threshold was met
+    #    3. Iterate on the three channels of the given image comparing it to the threshold
     above_thresh = (img[:,:,0] > rgb_thresh[0]) \
                 & (img[:,:,1] > rgb_thresh[1]) \
                 & (img[:,:,2] > rgb_thresh[2])
-    # Index the array of zeros with the boolean array and set to 1
+    #    4. If the given threshold is met, then it will be marked on the color_select which will be returned later
     color_select[above_thresh] = 1
-    # Return the binary image
     return color_select
 
-# Define a function to convert from image coords to rover coords
+#This function is used to Convert from image coords to rover coords
 def rover_coords(binary_img):
-    # Identify nonzero pixels
-    ypos, xpos = binary_img.nonzero()
-    # Calculate pixel positions with reference to the rover position being at the 
-    # center bottom of the image.  
+    #    1. Take the binary image then extract the nonzero pixel from it
+    ypos, xpos = binary_img.nonzero() 
+    #    2. Subtracting the y coordinates of the image from the rovers y position then invert it
     x_pixel = -(ypos - binary_img.shape[0]).astype(np.float)
+
+    #    3. Subtracting half of the x coordinates of the image from the rovers x position then invert it
     y_pixel = -(xpos - binary_img.shape[1]/2 ).astype(np.float)
+    #    4. return the float values of both x and y coordinates.
     return x_pixel, y_pixel
 
 
-# Define a function to convert to radial coords in rover space
+# This function converts from cartesian coordinates to polar coordinates.
 def to_polar_coords(x_pixel, y_pixel):
-    # Convert (x_pixel, y_pixel) to (distance, angle) 
-    # in polar coordinates in rover space
-    # Calculate distance to each pixel
-    dist = np.sqrt(x_pixel**2 + y_pixel**2)
-    # Calculate angle away from vertical for each pixel
+    #    1. It takes x and y coordinates
+    #    2. It calculates the distance by taking the square root of the squared coordinates 
+    dist = np.sqrt(x_pixel*2 + y_pixel*2)
+    #    3. It takes the arctan of the coordinates to calculate the angles
     angles = np.arctan2(y_pixel, x_pixel)
+    #    4. Then it returns both destinations and angles
     return dist, angles
 
-# Define a function to map rover space pixels to world space
+# This function is used to map the rover space to the world space
 def rotate_pix(xpix, ypix, yaw):
-    # Convert yaw to radians
+    #   1. The function takes x,y and yaw axis as a parameters
+    #   2. Then converts the yaw into radiant
     yaw_rad = yaw * np.pi / 180
     xpix_rotated = (xpix * np.cos(yaw_rad)) - (ypix * np.sin(yaw_rad))
-                            
+    #   3. Then rotates the x and y coordinates by using the converted yaw radiant
     ypix_rotated = (xpix * np.sin(yaw_rad)) + (ypix * np.cos(yaw_rad))
-    # Return the result  
+    #   4. Then it returns the rotated coordinates
     return xpix_rotated, ypix_rotated
 
+#The function applies both translation and scaling on any given coordinates
 def translate_pix(xpix_rot, ypix_rot, xpos, ypos, scale): 
-    # Apply a scaling and a translation
+    #   1. X and y coordinates, the amount of translation in x and y coordinates, and the scaling factor is a parameters of the function
+    #   2. The scaling is a division/multiplication operation, and the translation is plus/minus operations.
     xpix_translated = (xpix_rot / scale) + xpos
     ypix_translated = (ypix_rot / scale) + ypos
-    # Return the result  
+    #   3. Then it returns the translated and scaled coordinates.
     return xpix_translated, ypix_translated
 
-
-# Define a function to apply rotation and translation (and clipping)
-# Once you define the two functions above this function should work
+#This function applies different geometric transformations to output the final world map image. It also ties the previous functions together
 def pix_to_world(xpix, ypix, xpos, ypos, yaw, world_size, scale):
-    # Apply rotation
+    #   1. First it rotates the x and y coordinates
     xpix_rot, ypix_rot = rotate_pix(xpix, ypix, yaw)
-    # Apply translation
+
+    #   2. Then it translates and scale them using the given value
     xpix_tran, ypix_tran = translate_pix(xpix_rot, ypix_rot, xpos, ypos, scale)
-    # Perform rotation, translation and clipping all at once
+    #   3. Then at the end it clip the unwanted values to only have the wanted values
     x_pix_world = np.clip(np.int_(xpix_tran), 0, world_size - 1)
     y_pix_world = np.clip(np.int_(ypix_tran), 0, world_size - 1)
-    # Return the result
+    #   4. It returns the final x and y coordinates for the map image
     return x_pix_world, y_pix_world
 
-# Define a function to perform a perspective transform
+#This function creates the perepective transformation
 def perspect_transform(img, src, dst):
-           
+    #   1. The function takes the image, coordinates in the source image, and coordinates in the output image
+    #   2. Then it generates a transformation matrix and store it at M
     M = cv2.getPerspectiveTransform(src, dst)
-    warped = cv2.warpPerspective(img, M, (img.shape[1], img.shape[0]))# keep same size as input image
+    #   3. Then it uses the transformation matrix with the image to apply the perspective transformation to the image
+    warped = cv2.warpPerspective(img, M, (img.shape[1], img.shape[0]))
+    #   4. Then we create a mask which will have a values of 1s for navigable pixels and 0s for non-navigable pixels
     mask = cv2.warpPerspective(np.ones_like(img[:,:,0]),M, (img.shape[1], img.shape[0]))
-    
+    #   5. Then return both the mask and the transformed image
     return warped , mask
 
+#This function uses thresholding to identify the rocks but with minor modifications
 def find_rocks(img, thresh = (110,110,50)):
+    #   1. It takes the image and the wanted threshold
+    #   2. It compares the image three channels to the given threshold and store the values to rock_pixels
     rock_pixels = ((img[:,:,0]>thresh[0])\
                   &(img[:,:,1]>thresh[1])\
                   &(img[:,:,2]<thresh[2]))
+    #   3. A zero array is generated
     colored_pixels = np.zeros_like(img[:,:,0])
+    #   4. The identified pixels that met the conditions will be used as an index for the zero array generated and every found rock will be equal to 1
     colored_pixels[rock_pixels] = 1
+    #   5. The zero array is returned
     return colored_pixels
 
 
-# Apply the above functions in succession and update the Rover state accordingly
+
+# This function is the function that tie the previous functions together to create a better perception of the world and achieve the objectives we want
 def perception_step(Rover):
-    # Perform perception steps to update Rover()
-    # TODO: 
-    # NOTE: camera image is coming to you in Rover.img
-    # 1) Define source and destination points for perspective transform
-    # 2) Apply perspective transform
-    dst_size = 5 
-    # Set a bottom offset to account for the fact that the bottom of the image 
-    # is not the position of the rover but a bit in front of it
-    # this is just a rough guess, feel free to change it!
-    bottom_offset = 6
+    #1. Define the dst_size which is the destination size
+    dst_size = 10 
+    #2. Define bottom_offset which is just an offset the gives us a buffer by moving the position 6 units to the front
+    bottom_offset = 5
+    #3. Define the image, source, and destinations points for the perspective transformation
     image = Rover.img
     source = np.float32([[14, 140], [301 ,140],[200, 96], [118, 96]])
     destination = np.float32([[image.shape[1]/2 - dst_size, image.shape[0] - bottom_offset],
@@ -106,42 +112,41 @@ def perception_step(Rover):
                     [image.shape[1]/2 + dst_size, image.shape[0] - 2*dst_size - bottom_offset], 
                     [image.shape[1]/2 - dst_size, image.shape[0] - 2*dst_size - bottom_offset],
                     ])
+    #4. It will generate a perspective transformation and return the transformed image and the mask
     warped, mask = perspect_transform(Rover.img, source, destination)
-        # 3) Apply color threshold to identify navigable terrain/obstacles/rock samples
+    #5. Then it will apply color thresholding to identify navigable terrain, non-navigable terrain and rocks
     threshed = color_thresh(warped)
+    #6. Then it will generate obstacle maps in obs_map by multiplying the mask with threshold -1 so we get only the things in the field of view
     obs_map = np.absolute(np.float32(threshed) - 1)*mask
-
-    # 4) Update Rover.vision_image (this will be displayed on left side of screen)
-        # Example: Rover.vision_image[:,:,0] = obstacle color-thresholded binary image
-        #          Rover.vision_image[:,:,1] = rock_sample color-thresholded binary image
-        #          Rover.vision_image[:,:,2] = navigable terrain color-thresholded binary image
+    #7. Using the threshold and the obstacle map we modify the vision image for both the obstacles and the navigable terrain
     Rover.vision_image[:,:,2] = threshed *255
     Rover.vision_image[:,:,0] = obs_map *255
-    # 5) Convert map image pixel values to rover-centric coords
+    #8. Then It will convert the image coordinates to rover coordinates
     xpix, ypix = rover_coords(threshed)
-
-    # 6) Convert rover-centric pixel values to world coordinates
+    dist, angles = to_polar_coords(xpix, ypix)
+    mean_dir = np.mean(angles)
+    #9. It will define variables related to the scale and world size which will be used for the next step
     world_size = Rover.worldmap.shape[0]
     scale = 2 * dst_size
     x_world, y_world = pix_to_world(xpix,ypix, Rover.pos[0],Rover.pos[1], Rover.yaw, world_size, scale)
+    #10. Then it will convert the rover coordinates to world coordinates for both the obstacles and the walkable world
     obsxpix, obsypix = rover_coords(obs_map)
     obs_x_world, obs_y_world = pix_to_world(obsxpix,obsypix,Rover.pos[0],Rover.pos[1],Rover.yaw,world_size,scale)
-    
-    # 7) Update Rover worldmap (to be displayed on right side of screen)
-        # Example: Rover.worldmap[obstacle_y_world, obstacle_x_world, 0] += 1
-        #          Rover.worldmap[rock_y_world, rock_x_world, 1] += 1
-        #          Rover.worldmap[navigable_y_world, navigable_x_world, 2] += 1
-    Rover.worldmap[y_world,x_world,2]+=10
-    Rover.worldmap[obs_y_world,obs_x_world,0]+=1
-    # 8) Convert rover-centric pixel positions to polar coordinates
-    # Update Rover pixel distances and angles
-        # Rover.nav_dists = rover_centric_pixel_distances
-        # Rover.nav_angles = rover_centric_angles
+    #11. An updated rover worldmap is generated to be on the right where steps 12 and 13 happens taking into concideration pitch and roll
+    #12. The navigable terrain becomes blue given the world coordinates
+    #13. The obstacles become red given the obstacles coordinates
+    if(Rover.pitch< 1.6):
+        if(Rover.roll<5):
+            Rover.worldmap[y_world,x_world,2]+=10
+            Rover.worldmap[obs_y_world,obs_x_world,0]+=1
+    #14. Then the world is converted from rover coordinates to polar coordinates
     dist, angles = to_polar_coords(xpix,ypix)
     Rover.nav_angles = angles
-    #see if we can find rocks
+    #15. The find_rocks function is used to find the rocks
     rock_map = find_rocks(warped,(110,110,50))
-    if rock_map.any():# there are rocks in the captured frame
+    #16.  If rocks are identified, then it will convert the rock position to rover coordinates then to world coordinates then to polar coordinate
+    #17. Then color the rock with white on the map
+    if rock_map.any():
         rock_xpix , rock_ypix = rover_coords(rock_map)
 
         rock_xpix_world , rock_ypix_world =  pix_to_world(rock_xpix, rock_ypix, Rover.pos[0], Rover.pos[1], Rover.yaw, world_size, scale)
@@ -154,7 +159,30 @@ def perception_step(Rover):
         Rover.vision_image[:,:,1] = rock_map *255
     else:
         Rover.vision_image[:,:,1]=0
- 
-    
-    
-    return Rover
+
+    #18.Show the pipeline of our processes
+    image2 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    cv2.imshow('camera',image2)
+    warped2 = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB)
+    cv2.imshow('precpective transform',warped2)
+    mask2 = mask*255
+    cv2.imshow('precpective mask',mask2)
+    cv2.imshow('obstacle',obs_map)
+    threshed2 = threshed * 255
+    cv2.imshow('thershold',threshed2)
+    rock_map2 = rock_map*255
+    cv2.imshow('rock',rock_map2)
+    arrow_length=100
+    x_arrow = arrow_length * np.cos(mean_dir)
+    y_arrow = arrow_length * np.sin(mean_dir)
+    if( (x_arrow == x_arrow) and  (y_arrow == y_arrow) ):
+        color = (0, 0, 255)    
+        thickness = 2
+        view = image = cv2.rotate(threshed2, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        start_point = (int(view.shape[1]),int(view.shape[0]/2))
+        end_point=(int(x_arrow),int(y_arrow)+int(view.shape[0]/2))
+        direction = cv2.arrowedLine(view,start_point, end_point, color,thickness)
+        cv2.imshow('Direction', direction)
+    cv2.waitKey(5)
+
+    return Rover
