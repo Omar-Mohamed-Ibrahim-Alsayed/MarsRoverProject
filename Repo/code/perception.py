@@ -185,4 +185,4 @@ def perception_step(Rover):
         cv2.imshow('Direction', direction)
     cv2.waitKey(5)
 
-    return Rover
+    return Rover
