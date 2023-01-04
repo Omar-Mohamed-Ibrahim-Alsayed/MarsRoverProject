@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 
 #This function is used to detect and identify pixels that exceeds a given threshold.
-def color_thresh(img, rgb_thresh=(160, 160, 160)):
+def color_thresh(img, rgb_thresh=(180, 180, 160)):
     #    1. An image and a desired threshold is given to the function.
     #    2. Useing numpy to create a 0 initialized array where the detected element will be marked on
     color_select = np.zeros_like(img[:,:,0])
@@ -96,16 +96,12 @@ def find_rocks(img, thresh = (110,110,50)):
     #   5. The zero array is returned
     return colored_pixels
 
-def impose_range(xpix, ypix, range=80*2):
-    dist = np.sqrt(xpix*2 + ypix*2)
-    return xpix[dist < range], ypix[dist < range]
-
 def trim_ellipse(image):
     # create a mask image of the same shape as input image, filled with 0s (black color)
     mask = np.zeros_like(image)
     rows, cols, _ = mask.shape
     # create a white filled ellipse
-    mask = cv2.ellipse(mask, center=(int(cols / 2), int(rows)-5), axes=(int(cols / 2), 95), angle=0,
+    mask = cv2.ellipse(mask, center=(int(cols / 2), int(rows)-5), axes=(int(cols / 2), 80), angle=0,
                        startAngle=180, endAngle=360, color=(255, 255, 255), thickness=-1)
     # Bitwise AND operation to black out regions outside the mask
     return np.bitwise_and(image, mask)
@@ -118,7 +114,6 @@ def perception_step(Rover):
     bottom_offset = 5
     #3. Define the image, source, and destinations points for the perspective transformation
     image = Rover.img
-    #image = cv2.medianBlur(image,11)
     source = np.float32([[14, 140], [301 ,140],[200, 96], [118, 96]])
     destination = np.float32([[image.shape[1]/2 - dst_size, image.shape[0] - bottom_offset],
                     [image.shape[1]/2 + dst_size, image.shape[0] - bottom_offset],
@@ -127,7 +122,9 @@ def perception_step(Rover):
                     ])
     #4. It will generate a perspective transformation and return the transformed image and the mask
     warped, mask = perspect_transform(image, source, destination)
+    warped2 = warped
     warped = trim_ellipse(warped)
+    warped = cv2.medianBlur(warped,3)
     #5. Then it will apply color thresholding to identify navigable terrain, non-navigable terrain and rocks
     threshed = color_thresh(warped)
     #6. Then it will generate obstacle maps in obs_map by multiplying the mask with threshold -1 so we get only the things in the field of view
@@ -163,7 +160,7 @@ def perception_step(Rover):
     dist, angles = to_polar_coords(xpix,ypix)
     Rover.nav_angles = angles
     #15. The find_rocks function is used to find the rocks
-    rock_map = find_rocks(warped,(110,110,50))
+    rock_map = find_rocks(warped2,(110,110,50))
     #16.  If rocks are identified, then it will convert the rock position to rover coordinates then to world coordinates then to polar coordinate
     #17. Then color the rock with white on the map
     if rock_map.any():
