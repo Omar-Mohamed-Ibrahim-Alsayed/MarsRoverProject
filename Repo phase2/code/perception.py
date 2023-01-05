@@ -14,6 +14,19 @@ def color_thresh(img, rgb_thresh=(180, 180, 160)):
     color_select[above_thresh] = 1
     return color_select
 
+#This function is used to detect and identify pixels that exceeds a given threshold.
+def color_thresh_move(img, rgb_thresh=(160, 160, 160)):
+    #    1. An image and a desired threshold is given to the function.
+    #    2. Useing numpy to create a 0 initialized array where the detected element will be marked on
+    color_select = np.zeros_like(img[:,:,0])
+    #    3. Iterate on the three channels of the given image comparing it to the threshold
+    above_thresh = (img[:,:,0] > rgb_thresh[0]) \
+                & (img[:,:,1] > rgb_thresh[1]) \
+                & (img[:,:,2] > rgb_thresh[2])
+    #    4. If the given threshold is met, then it will be marked on the color_select which will be returned later
+    color_select[above_thresh] = 1
+    return color_select
+
 #This function is used to Convert from image coords to rover coords
 def rover_coords(binary_img):
     #    1. Take the binary image then extract the nonzero pixel from it
@@ -109,12 +122,12 @@ def trim_ellipse(image):
 # This function is the function that tie the previous functions together to create a better perception of the world and achieve the objectives we want
 def perception_step(Rover):
     #1. Define the dst_size which is the destination size
-    dst_size = 10 
+    dst_size = 5 
     #2. Define bottom_offset which is just an offset the gives us a buffer by moving the position 6 units to the front
     bottom_offset = 5
     #3. Define the image, source, and destinations points for the perspective transformation
     image = Rover.img
-    source = np.float32([[14, 140], [301 ,140],[200, 96], [118, 96]])
+    source = np.float32([[14, 140], [300 ,140],[200, 95], [120, 95]])
     destination = np.float32([[image.shape[1]/2 - dst_size, image.shape[0] - bottom_offset],
                     [image.shape[1]/2 + dst_size, image.shape[0] - bottom_offset],
                     [image.shape[1]/2 + dst_size, image.shape[0] - 2*dst_size - bottom_offset], 
@@ -127,6 +140,7 @@ def perception_step(Rover):
     warped = cv2.medianBlur(warped,3)
     #5. Then it will apply color thresholding to identify navigable terrain, non-navigable terrain and rocks
     threshed = color_thresh(warped)
+    threshed2 = color_thresh_move(warped)
     #6. Then it will generate obstacle maps in obs_map by multiplying the mask with threshold -1 so we get only the things in the field of view
     obs_map = np.absolute(np.float32(threshed) - 1)*mask
     #7. Using the threshold and the obstacle map we modify the vision image for both the obstacles and the navigable terrain
@@ -134,7 +148,10 @@ def perception_step(Rover):
     Rover.vision_image[:,:,0] = obs_map *255
     #8. Then It will convert the image coordinates to rover coordinates
     xpix, ypix = rover_coords(threshed)
-    dist, angles = to_polar_coords(xpix, ypix)
+    if Rover.starting_point is None:
+        Rover.starting_point = (xpix,ypix)
+    xpix_move, ypix_move = rover_coords(threshed2)
+    dist, angles = to_polar_coords(xpix_move, ypix_move)
     Rover.nav_dists = dist
     Rover.nav_angles = angles
     mean_dir = np.mean(angles)
@@ -149,7 +166,7 @@ def perception_step(Rover):
     #12. The navigable terrain becomes blue given the world coordinates
     #13. The obstacles become red given the obstacles coordinates
     #if(Rover.pitch< 1.6) and (Rover.roll<5):
-    if (Rover.pitch < 1 or Rover.pitch > 359) and (Rover.roll < 1 or Rover.roll > 359):
+    if (Rover.pitch < 0.5 or Rover.pitch > 359) and (Rover.roll < 0.5 or Rover.roll > 359):
         Rover.worldmap[y_world,x_world,2]+=10
         Rover.worldmap[obs_y_world,obs_x_world,0]+=1
         nav_pix = Rover.worldmap[:, :, 2] > 0
