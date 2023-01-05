@@ -16,7 +16,7 @@ def decision_step(Rover):
         # Steering proportional to the deviation results in
         # small offsets on straight lines and
         # large values in turns and open areas
-        offset = -0.6 * np.std(Rover.nav_angles)
+        offset = -0.8 * np.std(Rover.nav_angles)
 
 
     # Check if we have vision data to make decisions with
@@ -28,7 +28,7 @@ def decision_step(Rover):
             if Rover.samples_angles is not None and np.mean(Rover.samples_angles) < 0.2 and np.min(Rover.samples_dists) < 30:
                 Rover.steer = np.clip(np.mean(Rover.samples_angles * 180 / np.pi), -15, 15)
                 Rover.mode.append('rock')
-                if(Rover.total_time - Rover.stuck_time >20):
+                if(Rover.total_time - Rover.stuck_time >35):
                     Rover.stuck_time = Rover.total_time
 
             # Check the extent of navigable terrain
@@ -36,7 +36,7 @@ def decision_step(Rover):
                 # If mode is forward, navigable terrain looks good
                 # Except for start, if stopped means stuck.
                 # Alternates between stuck and forward modes
-                if Rover.vel <= 0.1 and Rover.total_time - Rover.stuck_time > 4 and not Rover.near_sample:
+                if Rover.vel <= 0.1 and Rover.total_time - Rover.stuck_time > 7 and not Rover.near_sample:
                     # Set mode to "stuck" and hit the brakes!
                     Rover.throttle = 0
                     # Set brake to stored brake value
@@ -92,7 +92,7 @@ def decision_step(Rover):
                     mean = np.mean(Rover.samples_angles * 180 / np.pi)
                     Rover.steer = np.clip(mean, -15, 15)
                     # if 20 sec passed gives up and goes back to previous mode
-                    if Rover.total_time - Rover.rock_time > 20:
+                    if Rover.total_time - Rover.rock_time > 35:
                         Rover.mode.pop()  # returns to previous mode
             else:
                 Rover.mode.pop() # no rock in sight anymore. Go back to previous state
@@ -105,7 +105,7 @@ def decision_step(Rover):
                 Rover.brake = Rover.brake_set
 
             #if got stuck go to stuck mode
-            elif Rover.vel <= 0 and (Rover.total_time - Rover.stuck_time > 10):
+            elif Rover.vel <= 0 and (Rover.total_time - Rover.stuck_time > 17):
                 Rover.throttle = 0
                 # Set brake to stored brake valuetime
                 Rover.brake = Rover.brake_set
@@ -161,4 +161,14 @@ def decision_step(Rover):
     # If in a state where want to pickup a rock send pickup command
     if Rover.near_sample and Rover.vel == 0 and not Rover.picking_up:
         Rover.send_pickup = True
+
+    if Rover.mapped >95 and Rover.samples_collected>=5:
+        Rover.done=1
+      
+    if Rover.done==1:
+        if Rover.initpoint[0]+3>Rover.pos[0]>Rover.initpoint[0]-3 and Rover.initpoint[1]+3>Rover.pos[1]>Rover.initpoint[1]-3:
+            Rover.steer=0
+            Rover.throttle=0
+            Rover.brake=Rover.brake_set
+            
     return Rover
