@@ -42,7 +42,7 @@ for step by step video
 - Blue: Navigable terrain (path)
 - White: Rock samples
 
-## Results
+## Results of phase 1
 
 During simulations, the project achieved the following objectives for Phase One:
 
@@ -64,3 +64,11 @@ The Mars Rover Project operates in a closed-loop feedback system with the follow
 4. **Geometric Transformations:** Apply rotations, scaling, and clipping.
 5. **Mapping:** Generate and update the world map with navigable terrain, obstacles, and identified rocks.
 6. **Debugging:** Visualize each step of the pipeline for debugging purposes.
+
+## Results of phase 2
+
+During simulations, the project achieved the following objectives for Phase two:
+| Mapping (%) | Fidelity (%)| Rocks (%)  | Success |
+|-------------|------------|------------|---------|
+| 98%         | 87%        | 100%        | Succeeded |
+
