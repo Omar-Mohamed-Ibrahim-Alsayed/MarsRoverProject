@@ -41,6 +41,7 @@ for step by step video
 - Red: Non-navigable terrain (obstacles)
 - Blue: Navigable terrain (path)
 - White: Rock samples
+![sim img](rover.jpg)
 
 ## Results of phase 1
 
@@ -64,6 +65,9 @@ The Mars Rover Project operates in a closed-loop feedback system with the follow
 4. **Geometric Transformations:** Apply rotations, scaling, and clipping.
 5. **Mapping:** Generate and update the world map with navigable terrain, obstacles, and identified rocks.
 6. **Debugging:** Visualize each step of the pipeline for debugging purposes.
+
+![map img](views.png)
+
 
 ## Results of phase 2
 
